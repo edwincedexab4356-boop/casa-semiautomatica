@@ -50,6 +50,10 @@ header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:s
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;position:relative;overflow:hidden}
 .c-matriz{grid-column:span 4}.c-alarma{grid-column:span 4}.c-garaje{grid-column:span 4}
+.distbox{display:flex;align-items:center;gap:10px;margin:8px 0}
+.distbox .num{font:700 30px 'JetBrains Mono',monospace;color:var(--rojo);min-width:92px;text-align:center}
+.distbox input{width:80px;font:600 16px 'JetBrains Mono',monospace;background:#0b0908;color:var(--txt,#f3ece4);border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips .btn.act{border-color:var(--rojo);color:var(--rojo)}
 .c-log{grid-column:span 7}.c-diag{grid-column:span 5}.c-editor{grid-column:span 12}
 .editor{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
 .editor .matriz{margin:0;cursor:pointer;width:260px;user-select:none;touch-action:none}
@@ -207,8 +211,10 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
         <!-- sensor ultrasonico en el poste, mirando hacia el auto -->
         <g id="ultra"><rect x="186" y="100" width="12" height="24" rx="2" fill="#2f6fb0"/><circle cx="187" cy="106" r="4.5" fill="#cfd6dd" stroke="#555"/><circle cx="187" cy="118" r="4.5" fill="#cfd6dd" stroke="#555"/>
           <g id="ondas" fill="none" stroke="#6cb8ff" stroke-width="2" stroke-linecap="round" opacity=".7"><path d="M178 104q-5 8 0 16"/><path d="M171 100q-8 12 0 24"/><path d="M164 96q-11 16 0 32"/></g></g>
+        <!-- distancia elegida -->
+        <g id="lineaUmb"><line x1="0" x2="0" y1="92" y2="146" stroke="#ff4d4d" stroke-width="2" stroke-dasharray="4 4"/><text id="lineaTxt" x="0" y="160" fill="#ff4d4d" font-size="10" text-anchor="middle" font-family="JetBrains Mono">15 cm</text></g>
         <!-- auto -->
-        <g id="auto" style="transition:transform 2.6s cubic-bezier(.45,0,.4,1)">
+        <g id="auto">
           <path d="M8 118h84l-8-20-18-10H34L18 100H8z" fill="#6cb8ff"/>
           <rect x="4" y="104" width="92" height="20" rx="6" fill="#6cb8ff"/>
           <path d="M36 92h28l12 9H26z" fill="#0d0b0a" opacity=".6"/>
@@ -223,6 +229,15 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
       <div style="display:flex;justify-content:space-between"><span>Distancia al auto <span class="mono" id="vLuz">—</span> cm</span><span style="color:var(--rojo)">abre a menos de <span class="mono" id="vUmb">—</span> cm</span></div>
       <div class="barraluz"><div class="marca" id="mUmb" style="left:30%"></div><div class="aguja" id="aLuz" style="left:50%"></div></div>
       <div class="escala"><span>0 cm (auto encima)</span><span>100 cm o más</span></div>
+      <div style="margin-top:14px;font-weight:600">Distancia para activar el motor</div>
+      <small style="color:var(--mut)">El servo abre cuando el auto está más cerca que esto (línea roja del dibujo)</small>
+      <div class="distbox">
+        <button class="btn chico" id="umbMenos" aria-label="Menos">−</button>
+        <div class="num"><span id="umbNum">15</span><small style="font-size:14px"> cm</small></div>
+        <button class="btn chico" id="umbMas" aria-label="Más">+</button>
+        <input type="number" id="umbIn" min="2" max="100" value="15" aria-label="Distancia en cm">
+      </div>
+      <div class="chips" id="umbChips"><button class="btn chico">5</button><button class="btn chico">10</button><button class="btn chico">15</button><button class="btn chico">20</button><button class="btn chico">30</button><button class="btn chico">50</button></div>
       <input type="range" id="rUmb" min="2" max="100" value="15" style="margin-top:10px">
       <div class="acciones" style="margin-top:8px"><button class="btn chico" id="bCal">🎯 Calibrar con el camino vacío</button></div>
     </div>
@@ -408,6 +423,8 @@ function pintar() {
   $('vLuz').textContent = S.luz >= 300 ? 'sin eco' : S.luz; $('vUmb').textContent = S.umbral;
   $('aLuz').style.left = Math.min(100, S.luz) + '%'; $('mUmb').style.left = Math.min(100, S.umbral) + '%';
   if (document.activeElement !== $('rUmb')) $('rUmb').value = S.umbral;
+  if (Date.now() - umbTocado > 1500) mostrarUmb(S.umbral);
+  if (modo === 'real') ponerAuto(S.luz < 110 ? 90 - S.luz * 1.7 : -110);
   $('ondas').setAttribute('stroke', S.luz < S.umbral ? '#ff4d4d' : '#6cb8ff');
   $('dAng').textContent = S.ang + '°';
 }
@@ -521,8 +538,29 @@ $('rSens').oninput = e => $('vSens').textContent = e.target.value;
 $('rSens').onchange = e => enviar('SENSVIB:' + e.target.value);
 $('bPuerta').onclick = () => enviar('PUERTA:' + (S.puerta ? 0 : 1));
 $('swAuto').onchange = e => enviar('AUTO:' + (e.target.checked ? 1 : 0));
-$('rUmb').oninput = e => { $('vUmb').textContent = e.target.value; $('mUmb').style.left = Math.min(100, e.target.value) + '%'; };
-$('rUmb').onchange = e => enviar('UMBRAL:' + e.target.value);
+/* ---------- distancia para activar el motor ---------- */
+let umbTocado = 0, umbTimer = null;
+function mostrarUmb(v) {
+  v = Math.max(2, Math.min(100, Math.round(v) || 2));
+  $('umbNum').textContent = v; $('vUmb').textContent = v; $('rUmb').value = v;
+  if (document.activeElement !== $('umbIn')) $('umbIn').value = v;
+  $('mUmb').style.left = v + '%';
+  const x = 186 - v * 1.7; $('lineaUmb').querySelector('line').setAttribute('x1', x); $('lineaUmb').querySelector('line').setAttribute('x2', x);
+  $('lineaTxt').setAttribute('x', Math.max(14, x)); $('lineaTxt').textContent = v + ' cm';
+  [...$('umbChips').children].forEach(b => b.classList.toggle('act', +b.textContent === v));
+  return v;
+}
+function elegirUmb(v) {
+  v = mostrarUmb(v); umbTocado = Date.now();
+  clearTimeout(umbTimer); umbTimer = setTimeout(() => { if (modo === 'nada') log('Distancia elegida: ' + v + ' cm (conecta el Arduino o el modo demostración para aplicarla)'); else enviar('UMBRAL:' + v); }, 350);
+}
+function ponerAuto(x) { $('auto').style.transform = 'translateX(' + x + 'px)'; }
+$('rUmb').oninput = e => elegirUmb(+e.target.value);
+$('umbMenos').onclick = () => elegirUmb(+$('umbNum').textContent - 1);
+$('umbMas').onclick = () => elegirUmb(+$('umbNum').textContent + 1);
+$('umbIn').onchange = e => elegirUmb(+e.target.value);
+[...$('umbChips').children].forEach(b => b.onclick = () => elegirUmb(+b.textContent));
+mostrarUmb(15);
 $('bCal').onclick = () => enviar('CAL');
 $('swDiag').onchange = e => enviar('DIAG:' + (e.target.checked ? 1 : 0));
 const mandarCmd = () => { const v = $('cmd').value.trim(); if (v) { enviar(v); log('» ' + v.toUpperCase()); $('cmd').value = ''; } };
@@ -531,7 +569,7 @@ $('bCmd').onclick = mandarCmd; $('cmd').onkeydown = e => { if (e.key === 'Enter'
 /* ---------- modo demostración (un Arduino de mentira con las mismas reglas) ---------- */
 function mostrarDemo(v) { ['bAplauso','bGolpe','bAuto'].forEach(id => $(id).hidden = !v); }
 const demo = (() => {
-  let t = [], d, tCuadro = 0, tBuz = 0, tClaro = 0, tOsc = 0, oscAntes = false, autoEncima = false, tAutoFin = 0;
+  let t = [], d, tCuadro = 0, tBuz = 0, tClaro = 0, tOsc = 0, oscAntes = false, carX = -110, carMeta = -110, fase = null, tEspera = 0;
   const ev = s => linea('EV,' + s);
   function figs() { linea('FG,1,' + d.f1); linea('FG,2,' + d.f2); }
   function st() { linea(['ST',d.matriz,d.cuadro,d.buzzer,d.resta,d.puerta,d.auto,d.luz,d.umbral,d.sonido,d.vibra,d.sens,d.brillo,d.ang].join(',')); }
@@ -542,9 +580,16 @@ const demo = (() => {
     const ahora = Date.now();
     if (d.matriz && ahora - tCuadro >= 700) { tCuadro = ahora; d.cuadro = (d.cuadro + 1) % 4; }
     if (d.buzzer) { d.resta = Math.max(0, Math.ceil((10000 - (ahora - tBuz)) / 1000)); if (ahora - tBuz >= 10000) buz(false, 'fin 10 s'); }
-    if (autoEncima && ahora > tAutoFin) autoEncima = false;
-    const meta = autoEncima ? 5 + Math.random() * 2 : 40 + Math.random() * 2;   // cm: vacío ≈ 40, auto ≈ 6
-    d.luz = Math.round((d.luz + meta) / 2);
+    // auto: avanza hacia su meta (1 cm = 1,7 px; el frente del auto esta en 96 + carX y el sensor en 186)
+    if (carX !== carMeta) { carX += Math.sign(carMeta - carX) * Math.min(fase === 'pasa' ? 6 : 1.6, Math.abs(carMeta - carX)); ponerAuto(carX); }
+    if (fase === 'llega' && carX === carMeta) { fase = 'espera'; tEspera = ahora; }
+    if (fase === 'espera') {
+      if (d.puerta && d.ang >= 90) { fase = 'pasa'; carMeta = 340; }
+      else if (ahora - tEspera > 3500) { ev('El auto no pudo pasar: está a ' + d.luz + ' cm y el motor se activa a menos de ' + d.umbral + ' cm'); fase = 'vuelve'; carMeta = -110; }
+    }
+    if ((fase === 'pasa' || fase === 'vuelve') && carX === carMeta) { fase = null; carX = carMeta = -110; ponerAuto(carX); }
+    const frente = 96 + carX;
+    d.luz = frente > 190 ? 120 : Math.max(2, Math.min(120, Math.round((186 - frente) / 1.7 + (Math.random() - .5))));
     const osc = d.luz < d.umbral;
     if (osc !== oscAntes) { oscAntes = osc; if (osc) tOsc = ahora; else tClaro = ahora; }
     if (d.auto) { if (osc && !d.puerta && ahora - tOsc >= 300) puerta(true, 'auto detectado'); if (!osc && d.puerta && ahora - tClaro >= 3000) puerta(false, 'auto ya paso'); }
@@ -574,22 +619,20 @@ const demo = (() => {
   return {
     orden,
     iniciar() {
-      d = { matriz:0, cuadro:0, buzzer:0, resta:0, puerta:0, auto:1, luz:40, umbral:15, sonido:1, vibra:1, sens:4, brillo:6, ang:0, f1:'0066FFFF7E3C1800', f2:'3C42A581A599423C' };
-      modo = 'demo'; ponerEstado('demo', 'Modo demostración'); $('bDesc').disabled = false; mostrarDemo(true);
+      d = { matriz:0, cuadro:0, buzzer:0, resta:0, puerta:0, auto:1, luz:120, umbral:15, sonido:1, vibra:1, sens:4, brillo:6, ang:0, f1:'0066FFFF7E3C1800', f2:'3C42A581A599423C' };
+      modo = 'demo'; ponerEstado('demo', 'Modo demostración'); ponerAuto(-110); $('bDesc').disabled = false; mostrarDemo(true);
       log('Modo demostración: usa los botones 👏 ✊ 🚗 para imitar los sensores');
       ev('Casa semiautomatica lista'); figs();
       t.push(setInterval(tic, 50), setInterval(() => { st(); if ($('swDiag').checked) linea('DG,0,0,0,0,' + d.luz); }, 250));
       st();
     },
-    parar() { t.forEach(clearInterval); t = []; $('auto').style.transform = ''; },
+    parar() { t.forEach(clearInterval); t = []; fase = null; carX = carMeta = -110; $('auto').style.transform = ''; },
     aplauso() { if (!d.sonido) return ev('Aplauso ignorado (aplausos desactivados)'); if (d.buzzer) return ev('Aplauso ignorado (suena el buzzer)'); matriz(!d.matriz, 'aplauso'); st(); },
     golpe() { if (!d.vibra) return ev('Vibracion ignorada (sensor apagado)'); if (!d.buzzer) buz(true, 'vibracion'); st(); },
     pasarAuto() {
-      const a = $('auto'); a.style.transition = 'none'; a.style.transform = 'translateX(0)'; a.getBoundingClientRect();
-      a.style.transition = ''; a.style.transform = 'translateX(85px)';
-      setTimeout(() => { autoEncima = true; tAutoFin = Date.now() + 2600; }, 1500);
-      setTimeout(() => { a.style.transform = 'translateX(330px)'; }, 4200);
-      setTimeout(() => { a.style.transition = 'none'; a.style.transform = ''; }, 7200);
+      if (fase) return;
+      // llega y se detiene a unos 5 cm del sensor; pasa solo si la compuerta abrio
+      carX = -110; carMeta = 81; fase = 'llega'; ponerAuto(carX);
     }
   };
 })();
