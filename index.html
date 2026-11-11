@@ -161,7 +161,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
     <p class="sub">Un aplauso enciende, otro apaga</p>
     <div class="matriz" id="matriz"></div>
     <div class="leyenda" id="leyenda"><span>❤ corazón</span><span>apagado</span><span>☺ carita</span><span>apagado</span></div>
-    <div class="acciones"><button class="btn pri" id="bMatriz">Encender</button><button class="btn" id="bAplauso" hidden>👏 Aplaudir</button></div>
+    <div class="acciones"><button class="btn pri" id="bMatriz">Encender</button><button class="btn" id="bPrueba">💡 Probar las 64 luces</button><button class="btn" id="bAplauso" hidden>👏 Aplaudir</button></div>
     <div class="fila" style="margin-top:14px"><div>Encender con aplausos<small>Si lo apagas, solo responde a la app</small></div><label class="sw"><input type="checkbox" id="swSonido" checked><span></span></label></div>
     <div class="fila" style="display:block"><div style="display:flex;justify-content:space-between">Brillo <span class="mono" id="vBrillo">6</span></div><input type="range" id="rBrillo" min="0" max="15" value="6"></div>
   </div>
@@ -464,6 +464,7 @@ $('bDemo').onclick = async () => { if (modo === 'real') await desconectar(); dem
 
 /* ---------- controles ---------- */
 $('bMatriz').onclick = () => enviar('MATRIZ:' + (S.matriz ? 0 : 1));
+$('bPrueba').onclick = () => enviar('PRUEBA');
 $('swSonido').onchange = e => enviar('SONIDO:' + (e.target.checked ? 1 : 0));
 $('rBrillo').oninput = e => $('vBrillo').textContent = e.target.value;
 $('rBrillo').onchange = e => enviar('BRILLO:' + e.target.value);
@@ -515,6 +516,7 @@ const demo = (() => {
     else if (c === 'SENSVIB' && v >= 0) { d.sens = Math.max(1, Math.min(20, v)); ev('Sensibilidad vibracion = ' + d.sens); }
     else if (c === 'BRILLO' && v >= 0) d.brillo = Math.min(15, v);
     else if (c === 'CAL') { d.umbral = Math.round(d.luz * .55); ev('Calibrado: umbral = ' + d.umbral); }
+    else if (c === 'PRUEBA') ev('Prueba de la matriz: 64 luces prendidas 3 s');
     else if (c === 'DIAG' || c === 'ESTADO') {}
     else { linea('ERR,' + o); return; }
     st();

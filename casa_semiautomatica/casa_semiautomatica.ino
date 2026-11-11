@@ -20,7 +20,7 @@
 
   Protocolo (9600, una orden por linea):
     MATRIZ:1/0  BUZZER:1/0  PUERTA:1/0  AUTO:1/0  SONIDO:1/0  VIBRA:1/0
-    UMBRAL:n (0-1023)  SENSVIB:n (1-20)  BRILLO:n (0-15)  CAL  ESTADO
+    UMBRAL:n (0-1023, fijo)  SENSVIB:n (1-20)  BRILLO:n (0-15)  CAL (umbral automatico)  PRUEBA  ESTADO
     DIAG:1/0 -> DG,sonido,muestras_sonido,vibra,cambios_vibra,luz_cruda (cada 250 ms)
   El Arduino responde cada 500 ms:
     ST,matriz,cuadro,buzzer,seg_restantes,puerta,auto,luz,umbral,sonido,vibra,sensvib,brillo,angulo
@@ -55,7 +55,9 @@ const unsigned long CUADRO_MS      = 700;     // tiempo de cada figura
 const unsigned long BLOQUEO_APLAUSO = 600;    // evita contar dos veces el mismo aplauso
 const unsigned long VENTANA_VIBRA  = 300;     // ventana para medir la vibracion
 const unsigned long CIERRE_MS      = 3000;    // se cierra 3 s despues de que el auto se va
-const unsigned long OSCURO_MS      = 400;     // tiene que estar oscuro 0,4 s seguidos
+const unsigned long OSCURO_MS      = 600;     // tiene que estar oscuro 0,6 s seguidos
+const unsigned long SOLTAR_SERVO   = 500;     // suelta el servo 0,5 s despues de llegar (no zumba ni tiembla)
+const byte PORC_OSCURO = 55;                  // oscuro = menos del 55 % de la luz normal
 
 SoftwareSerial bt(P_BT_RX, P_BT_TX);
 Servo compuerta;
@@ -101,6 +103,10 @@ bool estabaOscuro = false;
 
 bool sonidoOn = true, vibraOn = true;
 int  umbral = 300;             // por debajo de esto = oscuro (auto encima)
+bool umbralFijo = false;       // false = el umbral sigue solo a la luz del cuarto
+float base = -1;               // luz normal del cuarto (se aprende sola)
+unsigned long pruebaHasta = 0; // prueba de la matriz (todas las luces)
+bool servoPegado = false;
 byte sensVib = 4;              // cambios necesarios en 300 ms = vibracion moderada
 byte brillo = 6;
 int  luz = 1023;
@@ -183,7 +189,8 @@ void ponerPuerta(bool abrir, const char *origen) {
 }
 
 void guardar() {
-  EEPROM.put(0, (byte)0xC5);
+  EEPROM.put(0, (byte)0xC6);
+  EEPROM.put(6, (byte)umbralFijo);
   EEPROM.put(1, umbral);
   EEPROM.put(3, sensVib);
   EEPROM.put(4, brillo);
@@ -192,7 +199,8 @@ void guardar() {
 bool sinAjustes = false;
 void cargar() {
   byte firma; EEPROM.get(0, firma);
-  if (firma != 0xC5) { sinAjustes = true; return; }
+  if (firma != 0xC6) { sinAjustes = true; return; }
+  byte f; EEPROM.get(6, f); umbralFijo = f == 1;
   EEPROM.get(1, umbral);
   EEPROM.get(3, sensVib);
   EEPROM.get(4, brillo);
@@ -216,17 +224,20 @@ void orden(String s) {
   else if (cmd == "AUTO")    { modoAuto = val == 1; guardar(); evento(modoAuto ? "Compuerta en automatico" : "Compuerta en manual"); }
   else if (cmd == "SONIDO")  { sonidoOn = val == 1; evento(sonidoOn ? "Aplausos activados" : "Aplausos desactivados"); }
   else if (cmd == "VIBRA")   { vibraOn = val == 1; evento(vibraOn ? "Sensor de vibracion activado" : "Sensor de vibracion desactivado"); }
-  else if (cmd == "UMBRAL" && val >= 0)  { umbral = constrain(val, 0, 1023); guardar(); evento("Umbral de luz = " + String(umbral)); }
+  else if (cmd == "UMBRAL" && val >= 0)  { umbral = constrain(val, 0, 1023); umbralFijo = true; guardar(); evento("Umbral de luz = " + String(umbral)); }
   else if (cmd == "SENSVIB" && val >= 0) { sensVib = constrain(val, 1, 20); guardar(); evento("Sensibilidad vibracion = " + String(sensVib)); }
   else if (cmd == "BRILLO" && val >= 0)  { brillo = constrain(val, 0, 15); mx(0x0A, brillo); guardar(); }
   else if (cmd == "CAL") {
     // calibra con la luz que hay ahora: oscuro = 55 % de la luz normal
     long suma = 0;
     for (byte i = 0; i < 16; i++) { suma += analogRead(P_LDR); delay(5); }
-    umbral = (suma / 16) * 55 / 100;
+    base = suma / 16;
+    umbral = base * PORC_OSCURO / 100;
+    umbralFijo = false;
     guardar();
     evento("Calibrado: umbral = " + String(umbral));
   }
+  else if (cmd == "PRUEBA") { mx(0x0F, 1); pruebaHasta = millis() + 3000; evento("Prueba de la matriz: 64 luces prendidas 3 s"); }
   else if (cmd == "DIAG") { diag = val == 1; return; }
   else if (cmd == "ESTADO") { /* se responde abajo */ }
   else { enviar("ERR," + s); return; }
@@ -258,9 +269,12 @@ void setup() {
   luz = analogRead(P_LDR);
   mxIniciar();
   mxDibujar(0);
-  compuerta.attach(P_SERVO);
+  pinMode(P_SERVO, OUTPUT);
+  compuerta.attach(P_SERVO); servoPegado = true;
   compuerta.write(ANG_CERRADO);
   tMovio = millis();
+  // prueba al encender: las 64 luces prendidas 1,5 s (si alguna no prende, es la matriz o sus cables)
+  mx(0x0F, 1); pruebaHasta = millis() + 1500;
   if (sinAjustes) orden("CAL"); // la primera vez se calibra solo con la luz del lugar
   evento("Casa semiautomatica lista");
   evento(String("Sensor de sonido: activo en ") + (SONIDO_ACTIVO ? "HIGH" : "LOW") + ", silencio " + String(altos / 3) + "% alto");
@@ -313,6 +327,12 @@ void loop() {
   if (ahora - tLuz >= 50) {
     tLuz = ahora;
     luz = (luz * 3 + analogRead(P_LDR)) / 4;      // suavizado
+    if (base < 0) base = luz;
+    // la luz normal sigue despacio a la del cuarto (solo cuando no hay auto y la compuerta esta cerrada)
+    if (!umbralFijo && !estabaOscuro && !puertaAbierta && anguloActual == ANG_CERRADO) {
+      base += (luz - base) / 80.0;
+      umbral = base * PORC_OSCURO / 100;
+    }
     bool oscuro = luz < umbral;
     if (oscuro != estabaOscuro) { estabaOscuro = oscuro; if (oscuro) tOscuro = ahora; else tClaro = ahora; }
     if (modoAuto) {
@@ -326,9 +346,19 @@ void loop() {
     tServo = ahora;
     anguloActual += anguloMeta > anguloActual ? 2 : -2;
     if (abs(anguloActual - anguloMeta) < 2) anguloActual = anguloMeta;
+    if (!servoPegado) { compuerta.attach(P_SERVO); servoPegado = true; }
     compuerta.write(anguloActual);
     tMovio = ahora;
   }
+  if (servoPegado && anguloActual == anguloMeta && ahora - tMovio >= SOLTAR_SERVO) {
+    compuerta.detach(); servoPegado = false;   // sin senal el servo queda quieto y en silencio
+    digitalWrite(P_SERVO, LOW);
+  }
+
+  // ---- la matriz se reconfigura cada segundo (el ruido del servo la puede desordenar) ----
+  static unsigned long tMx = 0;
+  if (pruebaHasta && ahora >= pruebaHasta) { pruebaHasta = 0; mx(0x0F, 0); mostrarCuadro(); evento("Prueba de la matriz terminada"); }
+  if (!pruebaHasta && ahora - tMx >= 1000) { tMx = ahora; mxIniciar(); mostrarCuadro(); }
 
   // ---- diagnostico ----
   static unsigned long tDiag = 0;
