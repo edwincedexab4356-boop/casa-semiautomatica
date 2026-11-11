@@ -4,9 +4,9 @@
   - Aplauso (sensor de sonido)  -> enciende / apaga la matriz 8x8
                                    (corazon, apagado, carita, apagado... en bucle)
   - Vibracion moderada (SW-420) -> buzzer activo continuo por 10 segundos
-  - Fotoresistencia en el piso  -> si un auto la tapa (oscuro) el servo abre
-                                   la compuerta a 90 grados; se cierra sola
-                                   cuando el auto se va
+  - Sensor ultrasonico HC-SR04  -> si un auto se acerca a menos del umbral (cm)
+                                   el servo abre la compuerta a 90 grados; se
+                                   cierra sola cuando el auto se va
   - HC-05 (Bluetooth) y USB     -> control total desde la pagina web
 
   CONEXIONES
@@ -15,15 +15,16 @@
   Sensor vibra.  : VCC 5V, GND, DO  D3
   Buzzer activo  : +  D4, -  GND
   Servo          : rojo 5V, cafe GND, naranja D9
-  Fotoresistencia: una pata a 5V, la otra a A0  y  resistencia 10k de A0 a GND
+  Ultrasonico    : VCC 5V, GND, TRIG D8, ECHO D12
   HC-05          : VCC 5V, GND, TXD -> D10, RXD <- D11 (con divisor 1k / 2k)
 
   Protocolo (9600, una orden por linea):
     MATRIZ:1/0  BUZZER:1/0  PUERTA:1/0  AUTO:1/0  SONIDO:1/0  VIBRA:1/0
-    UMBRAL:n (0-1023, fijo)  SENSVIB:n (1-20)  BRILLO:n (0-15)  CAL (umbral automatico)  PRUEBA  ESTADO
-    DIAG:1/0 -> DG,sonido,muestras_sonido,vibra,cambios_vibra,luz_cruda (cada 250 ms)
+    FIG1:hex16 FIG2:hex16 (dibujos)  FIGS
+    UMBRAL:n (cm, 2-200)  SENSVIB:n (1-20)  BRILLO:n (0-15)  CAL (umbral = 60 % de la distancia sin auto)  PRUEBA  ESTADO
+    DIAG:1/0 -> DG,sonido,muestras_sonido,vibra,cambios_vibra,distancia_cm (cada 250 ms)
   El Arduino responde cada 500 ms:
-    ST,matriz,cuadro,buzzer,seg_restantes,puerta,auto,luz,umbral,sonido,vibra,sensvib,brillo,angulo
+    ST,matriz,cuadro,buzzer,seg_restantes,puerta,auto,distancia_cm,umbral_cm,sonido,vibra,sensvib,brillo,angulo
   y avisos:  EV,texto
 */
 
@@ -39,7 +40,8 @@ const byte P_BUZZER = 4;
 const byte P_SERVO  = 9;
 const byte P_BT_RX  = 10;   // aqui llega el TXD del HC-05
 const byte P_BT_TX  = 11;   // va al RXD del HC-05 (con divisor)
-const byte P_LDR    = A0;
+const byte P_TRIG   = 8;    // ultrasonico HC-SR04
+const byte P_ECHO   = 12;
 
 // ---------- ajustes ----------
 // El nivel del sensor de sonido en silencio se aprende solo al encender
@@ -55,9 +57,9 @@ const unsigned long CUADRO_MS      = 700;     // tiempo de cada figura
 const unsigned long BLOQUEO_APLAUSO = 600;    // evita contar dos veces el mismo aplauso
 const unsigned long VENTANA_VIBRA  = 300;     // ventana para medir la vibracion
 const unsigned long CIERRE_MS      = 3000;    // se cierra 3 s despues de que el auto se va
-const unsigned long OSCURO_MS      = 600;     // tiene que estar oscuro 0,6 s seguidos
+const unsigned long CERCA_MS       = 300;     // el auto tiene que estar 0,3 s seguidos
 const unsigned long SOLTAR_SERVO   = 500;     // suelta el servo 0,5 s despues de llegar (no zumba ni tiembla)
-const byte PORC_OSCURO = 55;                  // oscuro = menos del 55 % de la luz normal
+const int  DIST_MAX = 300;                    // sin eco = lejos (300 cm)
 
 SoftwareSerial bt(P_BT_RX, P_BT_TX);
 Servo compuerta;
@@ -84,6 +86,8 @@ const byte CARITA[8] = {
   B00111100
 };
 
+byte figs[2][8];               // las 2 figuras que se ven (editables desde la pagina)
+
 // ---------- estado ----------
 bool matrizOn = false;
 byte cuadro = 0;               // 0 corazon, 1 apagado, 2 carita, 3 apagado
@@ -98,37 +102,61 @@ int  anguloActual = ANG_CERRADO;
 int  anguloMeta = ANG_CERRADO;
 unsigned long tServo = 0;
 unsigned long tMovio = 0;      // ultima vez que se movio el servo
-unsigned long tOscuro = 0, tClaro = 0;
-bool estabaOscuro = false;
+unsigned long tCerca = 0, tClaro = 0;
+bool estabaCerca = false;
 
 bool sonidoOn = true, vibraOn = true;
-int  umbral = 300;             // por debajo de esto = oscuro (auto encima)
-bool umbralFijo = false;       // false = el umbral sigue solo a la luz del cuarto
-float base = -1;               // luz normal del cuarto (se aprende sola)
+int  umbral = 10;              // cm: mas cerca que esto = hay auto
 unsigned long pruebaHasta = 0; // prueba de la matriz (todas las luces)
 bool servoPegado = false;
 byte sensVib = 4;              // cambios necesarios en 300 ms = vibracion moderada
 byte brillo = 6;
-int  luz = 1023;
+int  dist = DIST_MAX;           // cm medidos por el ultrasonico
 
-int  ultimoSonido = !SONIDO_ACTIVO;
 unsigned long tAplauso = 0;
-
-int  ultimoVibra = LOW;
-byte cambiosVibra = 0;
+volatile bool aplausoNuevo = false;   // lo marcan las interrupciones (no se pierde nada
+volatile byte cambiosVibra = 0;       // mientras el ultrasonico mide)
 unsigned long tVentana = 0;
 
 unsigned long tEstado = 0;
 bool diag = false;             // DIAG:1 muestra las lecturas crudas
-unsigned int dgSonido = 0, dgVibra = 0;
+volatile unsigned int dgSonido = 0, dgVibra = 0;
+volatile unsigned long tSonIni = 0, tRafaga = 0;
+volatile byte pulsosRafaga = 0;
+void isrSonido() {
+  unsigned long t = micros();
+  if (digitalRead(P_SONIDO) == SONIDO_ACTIVO) tSonIni = t | 1;
+  else if (tSonIni && t - tSonIni >= 100) {
+    // un aplauso da una rafaga de pulsos; un ruido suelto da uno solo
+    if (t - tRafaga > 60000UL) { tRafaga = t; pulsosRafaga = 0; }
+    if (++pulsosRafaga == 3) aplausoNuevo = true;
+    dgSonido++; tSonIni = 0;
+  }
+  else tSonIni = 0;
+}
+void isrVibra()  { if (cambiosVibra < 250) cambiosVibra++; dgVibra++; }
 String linUsb, linBt;
 
 // ================= MAX7219 =================
+// envio lento: con cables largos o ruido del servo no se pierden bits
+void mxByte(byte b) {
+  for (byte i = 0; i < 8; i++) {
+    digitalWrite(P_CLK, LOW);
+    digitalWrite(P_DIN, (b & 0x80) ? HIGH : LOW);
+    b <<= 1;
+    delayMicroseconds(2);
+    digitalWrite(P_CLK, HIGH);
+    delayMicroseconds(2);
+  }
+}
 void mx(byte reg, byte val) {
+
   digitalWrite(P_CS, LOW);
-  shiftOut(P_DIN, P_CLK, MSBFIRST, reg);
-  shiftOut(P_DIN, P_CLK, MSBFIRST, val);
+  mxByte(reg);
+  mxByte(val);
+  digitalWrite(P_CLK, LOW);
   digitalWrite(P_CS, HIGH);
+
 }
 void mxIniciar() {
   pinMode(P_DIN, OUTPUT); pinMode(P_CS, OUTPUT); pinMode(P_CLK, OUTPUT);
@@ -147,8 +175,8 @@ void mxDibujar(const byte *f) {
 }
 void mostrarCuadro() {
   if (!matrizOn) { mxDibujar(0); return; }
-  if (cuadro == 0) mxDibujar(CORAZON);
-  else if (cuadro == 2) mxDibujar(CARITA);
+  if (cuadro == 0) mxDibujar(figs[0]);
+  else if (cuadro == 2) mxDibujar(figs[1]);
   else mxDibujar(0);
 }
 
@@ -163,7 +191,7 @@ void enviarEstado() {
   long resta = buzzerOn ? (long)(BUZZER_MS - (millis() - tBuzzer) + 999) / 1000 : 0;
   s += resta; s += ',';
   s += puertaAbierta; s += ','; s += modoAuto; s += ',';
-  s += luz; s += ','; s += umbral; s += ',';
+  s += dist; s += ','; s += umbral; s += ',';
   s += sonidoOn; s += ','; s += vibraOn; s += ',';
   s += sensVib; s += ','; s += brillo; s += ','; s += anguloActual;
   enviar(s);
@@ -189,23 +217,39 @@ void ponerPuerta(bool abrir, const char *origen) {
 }
 
 void guardar() {
-  EEPROM.put(0, (byte)0xC6);
-  EEPROM.put(6, (byte)umbralFijo);
+  EEPROM.put(0, (byte)0xC7);
   EEPROM.put(1, umbral);
   EEPROM.put(3, sensVib);
   EEPROM.put(4, brillo);
   EEPROM.put(5, (byte)modoAuto);
 }
+const char HEX_D[] = "0123456789ABCDEF";
+void enviarFigs() {
+  for (byte k = 0; k < 2; k++) {
+    String s = "FG," + String(k + 1) + ",";
+    for (byte i = 0; i < 8; i++) { s += HEX_D[figs[k][i] >> 4]; s += HEX_D[figs[k][i] & 15]; }
+    enviar(s);
+  }
+}
+void cargarFigs() {
+  memcpy(figs[0], CORAZON, 8); memcpy(figs[1], CARITA, 8);
+  byte f; EEPROM.get(10, f);
+  if (f == 0xA7) for (byte i = 0; i < 16; i++) figs[i / 8][i % 8] = EEPROM.read(11 + i);
+}
+void guardarFigs() {
+  EEPROM.update(10, 0xA7);
+  for (byte i = 0; i < 16; i++) EEPROM.update(11 + i, figs[i / 8][i % 8]);
+}
+int hexVal(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
 bool sinAjustes = false;
 void cargar() {
   byte firma; EEPROM.get(0, firma);
-  if (firma != 0xC6) { sinAjustes = true; return; }
-  byte f; EEPROM.get(6, f); umbralFijo = f == 1;
+  if (firma != 0xC7) { sinAjustes = true; return; }
   EEPROM.get(1, umbral);
   EEPROM.get(3, sensVib);
   EEPROM.get(4, brillo);
   byte a; EEPROM.get(5, a); modoAuto = a;
-  umbral = constrain(umbral, 0, 1023);
+  umbral = constrain(umbral, 2, 200);
   sensVib = constrain(sensVib, 1, 20);
   brillo = constrain(brillo, 0, 15);
 }
@@ -224,24 +268,54 @@ void orden(String s) {
   else if (cmd == "AUTO")    { modoAuto = val == 1; guardar(); evento(modoAuto ? "Compuerta en automatico" : "Compuerta en manual"); }
   else if (cmd == "SONIDO")  { sonidoOn = val == 1; evento(sonidoOn ? "Aplausos activados" : "Aplausos desactivados"); }
   else if (cmd == "VIBRA")   { vibraOn = val == 1; evento(vibraOn ? "Sensor de vibracion activado" : "Sensor de vibracion desactivado"); }
-  else if (cmd == "UMBRAL" && val >= 0)  { umbral = constrain(val, 0, 1023); umbralFijo = true; guardar(); evento("Umbral de luz = " + String(umbral)); }
+  else if (cmd == "UMBRAL" && val >= 0)  { umbral = constrain(val, 2, 200); guardar(); evento("Distancia para abrir = " + String(umbral) + " cm"); }
   else if (cmd == "SENSVIB" && val >= 0) { sensVib = constrain(val, 1, 20); guardar(); evento("Sensibilidad vibracion = " + String(sensVib)); }
   else if (cmd == "BRILLO" && val >= 0)  { brillo = constrain(val, 0, 15); mx(0x0A, brillo); guardar(); }
   else if (cmd == "CAL") {
-    // calibra con la luz que hay ahora: oscuro = 55 % de la luz normal
-    long suma = 0;
-    for (byte i = 0; i < 16; i++) { suma += analogRead(P_LDR); delay(5); }
-    base = suma / 16;
-    umbral = base * PORC_OSCURO / 100;
-    umbralFijo = false;
-    guardar();
-    evento("Calibrado: umbral = " + String(umbral));
+    // calibra con el camino vacio: abre si algo esta a menos del 60 % de esa distancia
+    int d[5];
+    for (byte i = 0; i < 5; i++) { d[i] = medir(); delay(40); }
+    for (byte i = 0; i < 5; i++) for (byte j = i + 1; j < 5; j++) if (d[j] < d[i]) { int t = d[i]; d[i] = d[j]; d[j] = t; }
+    if (d[2] >= DIST_MAX) {
+      umbral = 15; guardar();
+      evento("El ultrasonico no da eco (revisa TRIG D8 y ECHO D12). Abre a menos de 15 cm");
+    } else {
+      umbral = constrain((long)d[2] * 60 / 100, 3, 100);
+      guardar();
+      evento("Calibrado: sin auto " + String(d[2]) + " cm, abre a menos de " + String(umbral) + " cm");
+    }
   }
+  else if ((cmd == "FIG1" || cmd == "FIG2") && dos > 0) {
+    // FIG1:0066FFFF7E3C1800 = 8 filas en hexadecimal (bit alto = columna izquierda)
+    String h = s.substring(dos + 1);
+    if (h.length() != 16) { enviar("ERR," + s); return; }
+    byte nueva[8];
+    for (byte i = 0; i < 8; i++) {
+      int a = hexVal(h[i * 2]), b = hexVal(h[i * 2 + 1]);
+      if (a < 0 || b < 0) { enviar("ERR," + s); return; }
+      nueva[i] = a * 16 + b;
+    }
+    byte k = cmd == "FIG1" ? 0 : 1;
+    memcpy(figs[k], nueva, 8); guardarFigs();
+    // la muestra 2 s en la matriz para verla
+    mx(0x0F, 0); mxDibujar(figs[k]); pruebaHasta = millis() + 2000;
+    evento(String("Figura ") + (k + 1) + " guardada");
+    enviarFigs();
+  }
+  else if (cmd == "FIGS") { enviarFigs(); return; }
   else if (cmd == "PRUEBA") { mx(0x0F, 1); pruebaHasta = millis() + 3000; evento("Prueba de la matriz: 64 luces prendidas 3 s"); }
   else if (cmd == "DIAG") { diag = val == 1; return; }
-  else if (cmd == "ESTADO") { /* se responde abajo */ }
+  else if (cmd == "ESTADO") { enviarFigs(); }
   else { enviar("ERR," + s); return; }
   enviarEstado();
+}
+int medir() {   // distancia en cm (DIST_MAX si no hay eco)
+  digitalWrite(P_TRIG, LOW); delayMicroseconds(3);
+  digitalWrite(P_TRIG, HIGH); delayMicroseconds(10);
+  digitalWrite(P_TRIG, LOW);
+  unsigned long us = pulseIn(P_ECHO, HIGH, 18000UL);   // 18 ms = unos 3 m
+  if (us == 0) return DIST_MAX;
+  return min((long)(us / 58), (long)DIST_MAX);
 }
 void leer(Stream &p, String &lin) {
   while (p.available()) {
@@ -260,13 +334,16 @@ void setup() {
   pinMode(P_BUZZER, OUTPUT);
   digitalWrite(P_BUZZER, LOW);
   cargar();
+  cargarFigs();
   // aprender el nivel de silencio del sensor de sonido (0,6 s)
   int altos = 0;
   for (int i = 0; i < 300; i++) { altos += digitalRead(P_SONIDO); delay(2); }
   SONIDO_ACTIVO = altos > 150 ? LOW : HIGH;
-  ultimoSonido = !SONIDO_ACTIVO;
-  ultimoVibra = digitalRead(P_VIBRA);
-  luz = analogRead(P_LDR);
+  pinMode(P_TRIG, OUTPUT); digitalWrite(P_TRIG, LOW);
+  pinMode(P_ECHO, INPUT);
+  dist = medir();
+  attachInterrupt(digitalPinToInterrupt(P_SONIDO), isrSonido, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(P_VIBRA), isrVibra, CHANGE);
   mxIniciar();
   mxDibujar(0);
   pinMode(P_SERVO, OUTPUT);
@@ -275,9 +352,10 @@ void setup() {
   tMovio = millis();
   // prueba al encender: las 64 luces prendidas 1,5 s (si alguna no prende, es la matriz o sus cables)
   mx(0x0F, 1); pruebaHasta = millis() + 1500;
-  if (sinAjustes) orden("CAL"); // la primera vez se calibra solo con la luz del lugar
+  if (sinAjustes) orden("CAL"); // la primera vez se calibra solo con el camino vacio
   evento("Casa semiautomatica lista");
   evento(String("Sensor de sonido: activo en ") + (SONIDO_ACTIVO ? "HIGH" : "LOW") + ", silencio " + String(altos / 3) + "% alto");
+  enviarFigs();
   enviarEstado();
 }
 
@@ -291,15 +369,13 @@ void loop() {
   bool servoQuieto = (ahora - tMovio) > 800 && ahora > 2000;
 
   // ---- aplauso ----
-  int s = digitalRead(P_SONIDO);
-  if (s == SONIDO_ACTIVO && ultimoSonido != SONIDO_ACTIVO) {
+  if (aplausoNuevo) {
+    aplausoNuevo = false;
     if (sonidoOn && !buzzerOn && servoQuieto && ahora - tAplauso > BLOQUEO_APLAUSO) {
       tAplauso = ahora;
       ponerMatriz(!matrizOn, "aplauso");
     }
   }
-  ultimoSonido = s;
-  if (s == SONIDO_ACTIVO) dgSonido++;
 
   // ---- animacion de la matriz ----
   if (matrizOn && ahora - tCuadro >= CUADRO_MS) {
@@ -309,8 +385,6 @@ void loop() {
   }
 
   // ---- vibracion moderada ----
-  int v = digitalRead(P_VIBRA);
-  if (v != ultimoVibra) { cambiosVibra++; dgVibra++; ultimoVibra = v; }
   if (ahora - tVentana >= VENTANA_VIBRA) {
     if (vibraOn && !buzzerOn && servoQuieto && cambiosVibra >= sensVib) {
       ponerBuzzer(true, "vibracion");
@@ -322,22 +396,21 @@ void loop() {
   // ---- buzzer 10 s ----
   if (buzzerOn && ahora - tBuzzer >= BUZZER_MS) ponerBuzzer(false, "fin 10 s");
 
-  // ---- fotoresistencia y compuerta ----
-  static unsigned long tLuz = 0;
-  if (ahora - tLuz >= 50) {
-    tLuz = ahora;
-    luz = (luz * 3 + analogRead(P_LDR)) / 4;      // suavizado
-    if (base < 0) base = luz;
-    // la luz normal sigue despacio a la del cuarto (solo cuando no hay auto y la compuerta esta cerrada)
-    if (!umbralFijo && !estabaOscuro && !puertaAbierta && anguloActual == ANG_CERRADO) {
-      base += (luz - base) / 80.0;
-      umbral = base * PORC_OSCURO / 100;
-    }
-    bool oscuro = luz < umbral;
-    if (oscuro != estabaOscuro) { estabaOscuro = oscuro; if (oscuro) tOscuro = ahora; else tClaro = ahora; }
+  // ---- ultrasonico y compuerta ----
+  static unsigned long tDist = 0;
+  static int m[3] = {DIST_MAX, DIST_MAX, DIST_MAX};
+  static byte im = 0;
+  if (ahora - tDist >= 70) {
+    tDist = ahora;
+    m[im] = medir(); im = (im + 1) % 3;
+    // mediana de las 3 ultimas: un eco falso suelto no abre la compuerta
+    int a = m[0], b = m[1], c = m[2];
+    dist = max(min(a, b), min(max(a, b), c));
+    bool cerca = dist < umbral;
+    if (cerca != estabaCerca) { estabaCerca = cerca; if (cerca) tCerca = ahora; else tClaro = ahora; }
     if (modoAuto) {
-      if (oscuro && !puertaAbierta && ahora - tOscuro >= OSCURO_MS) ponerPuerta(true, "auto detectado");
-      if (!oscuro && puertaAbierta && ahora - tClaro >= CIERRE_MS) ponerPuerta(false, "auto ya paso");
+      if (cerca && !puertaAbierta && ahora - tCerca >= CERCA_MS) ponerPuerta(true, "auto detectado");
+      if (!cerca && puertaAbierta && ahora - tClaro >= CIERRE_MS) ponerPuerta(false, "auto ya paso");
     }
   }
 
@@ -357,14 +430,14 @@ void loop() {
 
   // ---- la matriz se reconfigura cada segundo (el ruido del servo la puede desordenar) ----
   static unsigned long tMx = 0;
-  if (pruebaHasta && ahora >= pruebaHasta) { pruebaHasta = 0; mx(0x0F, 0); mostrarCuadro(); evento("Prueba de la matriz terminada"); }
-  if (!pruebaHasta && ahora - tMx >= 1000) { tMx = ahora; mxIniciar(); mostrarCuadro(); }
+  if (pruebaHasta && ahora >= pruebaHasta) { pruebaHasta = 0; mx(0x0F, 0); mostrarCuadro(); }
+  if (!pruebaHasta && ahora - tMx >= 300) { tMx = ahora; mxIniciar(); mostrarCuadro(); }
 
   // ---- diagnostico ----
   static unsigned long tDiag = 0;
   if (diag && ahora - tDiag >= 250) {
     tDiag = ahora;
-    enviar("DG," + String(digitalRead(P_SONIDO)) + "," + String(dgSonido) + "," + String(digitalRead(P_VIBRA)) + "," + String(dgVibra) + "," + String(analogRead(P_LDR)));
+    enviar("DG," + String(digitalRead(P_SONIDO)) + "," + String(dgSonido) + "," + String(digitalRead(P_VIBRA)) + "," + String(dgVibra) + "," + String(dist));
     dgSonido = 0; dgVibra = 0;
   }
 

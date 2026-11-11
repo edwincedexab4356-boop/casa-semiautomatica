@@ -50,7 +50,13 @@ header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:s
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;position:relative;overflow:hidden}
 .c-matriz{grid-column:span 4}.c-alarma{grid-column:span 4}.c-garaje{grid-column:span 4}
-.c-log{grid-column:span 7}.c-diag{grid-column:span 5}
+.c-log{grid-column:span 7}.c-diag{grid-column:span 5}.c-editor{grid-column:span 12}
+.editor{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.editor .matriz{margin:0;cursor:pointer;width:260px;user-select:none;touch-action:none}
+.editor .led{background:#3a1c1c}.editor .led:hover{outline:2px solid #ffb54788}
+.pestanas{display:flex;gap:8px;margin-bottom:12px}.pestanas .btn.act{border-color:var(--rosa);color:var(--rosa)}
+.editor .lado{flex:1;min-width:240px}.mini{display:flex;gap:10px;margin-top:10px}
+.mini canvas{border-radius:8px;border:1px solid var(--line);background:#0b0908}
 @media(max-width:980px){.c-matriz,.c-alarma,.c-garaje{grid-column:span 6}.c-garaje{grid-column:span 12}.c-log,.c-diag{grid-column:span 12}}
 @media(max-width:640px){.grid>*{grid-column:span 12!important}}
 .card h2{font-size:19px;font-weight:800;display:flex;align-items:center;gap:9px;margin-bottom:2px}
@@ -92,7 +98,7 @@ input[type=range]{width:100%;accent-color:var(--amb)}
 /* garaje */
 .escena{background:#0d0b0a;border:1px solid #2a231e;border-radius:14px;margin-bottom:6px}
 .escena svg{display:block;width:100%;height:auto}
-.barraluz{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#000,#5a4630 45%,#ffe2a8);margin:8px 0 4px}
+.barraluz{position:relative;height:14px;border-radius:99px;background:linear-gradient(90deg,#ff4d4d,#5a4630 40%,#2c3b4a);margin:8px 0 4px}
 .barraluz .aguja{position:absolute;top:-4px;width:4px;height:22px;background:#fff;border-radius:2px;transform:translateX(-2px);transition:left .3s}
 .barraluz .marca{position:absolute;top:-7px;width:2px;height:28px;background:var(--rojo);transform:translateX(-1px)}
 .escala{display:flex;justify-content:space-between;font-size:12px;color:var(--mut)}
@@ -160,7 +166,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
     <h2>💡 Luces de la sala</h2>
     <p class="sub">Un aplauso enciende, otro apaga</p>
     <div class="matriz" id="matriz"></div>
-    <div class="leyenda" id="leyenda"><span>❤ corazón</span><span>apagado</span><span>☺ carita</span><span>apagado</span></div>
+    <div class="leyenda" id="leyenda"><span>dibujo 1</span><span>apagado</span><span>dibujo 2</span><span>apagado</span></div>
     <div class="acciones"><button class="btn pri" id="bMatriz">Encender</button><button class="btn" id="bPrueba">💡 Probar las 64 luces</button><button class="btn" id="bAplauso" hidden>👏 Aplaudir</button></div>
     <div class="fila" style="margin-top:14px"><div>Encender con aplausos<small>Si lo apagas, solo responde a la app</small></div><label class="sw"><input type="checkbox" id="swSonido" checked><span></span></label></div>
     <div class="fila" style="display:block"><div style="display:flex;justify-content:space-between">Brillo <span class="mono" id="vBrillo">6</span></div><input type="range" id="rBrillo" min="0" max="15" value="6"></div>
@@ -184,7 +190,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
   <div class="card c-garaje">
     <span class="etq" id="etqPuerta">Cerrada</span>
     <h2>🚗 Compuerta del garaje</h2>
-    <p class="sub">La fotoresistencia del piso se tapa con el auto y el servo abre a 90°</p>
+    <p class="sub">El sensor ultrasónico ve al auto cerca y el servo abre a 90°</p>
     <div class="escena">
       <svg viewBox="0 0 360 170" aria-label="Garaje">
         <rect x="0" y="128" width="360" height="42" fill="#221d19"/>
@@ -198,8 +204,9 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
           <rect x="72" y="79" width="132" height="10" rx="5" fill="#ffb547"/>
           <g fill="#14110f"><rect x="92" y="79" width="12" height="10"/><rect x="120" y="79" width="12" height="10"/><rect x="148" y="79" width="12" height="10"/><rect x="176" y="79" width="12" height="10"/></g>
         </g>
-        <!-- fotoresistencia -->
-        <g id="ldr"><ellipse cx="140" cy="140" rx="12" ry="5" fill="#ff8a3d"/><ellipse id="ldrBrillo" cx="140" cy="140" rx="26" ry="9" fill="#ffb54733"/></g>
+        <!-- sensor ultrasonico en el poste, mirando hacia el auto -->
+        <g id="ultra"><rect x="186" y="100" width="12" height="24" rx="2" fill="#2f6fb0"/><circle cx="187" cy="106" r="4.5" fill="#cfd6dd" stroke="#555"/><circle cx="187" cy="118" r="4.5" fill="#cfd6dd" stroke="#555"/>
+          <g id="ondas" fill="none" stroke="#6cb8ff" stroke-width="2" stroke-linecap="round" opacity=".7"><path d="M178 104q-5 8 0 16"/><path d="M171 100q-8 12 0 24"/><path d="M164 96q-11 16 0 32"/></g></g>
         <!-- auto -->
         <g id="auto" style="transition:transform 2.6s cubic-bezier(.45,0,.4,1)">
           <path d="M8 118h84l-8-20-18-10H34L18 100H8z" fill="#6cb8ff"/>
@@ -213,11 +220,40 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
     <div class="acciones"><button class="btn pri" id="bPuerta">Abrir</button><button class="btn" id="bAuto" hidden>🚗 Pasar un auto</button></div>
     <div class="fila" style="margin-top:14px"><div>Modo automático<small>Abre sola con el auto y cierra 3 s después</small></div><label class="sw"><input type="checkbox" id="swAuto" checked><span></span></label></div>
     <div class="fila" style="display:block">
-      <div style="display:flex;justify-content:space-between"><span>Luz en el piso <span class="mono" id="vLuz">—</span></span><span style="color:var(--rojo)">umbral <span class="mono" id="vUmb">—</span></span></div>
+      <div style="display:flex;justify-content:space-between"><span>Distancia al auto <span class="mono" id="vLuz">—</span> cm</span><span style="color:var(--rojo)">abre a menos de <span class="mono" id="vUmb">—</span> cm</span></div>
       <div class="barraluz"><div class="marca" id="mUmb" style="left:30%"></div><div class="aguja" id="aLuz" style="left:50%"></div></div>
-      <div class="escala"><span>oscuro (auto encima)</span><span>claro</span></div>
-      <input type="range" id="rUmb" min="0" max="1023" value="300" style="margin-top:10px">
-      <div class="acciones" style="margin-top:8px"><button class="btn chico" id="bCal">🎯 Calibrar con la luz de ahora</button></div>
+      <div class="escala"><span>0 cm (auto encima)</span><span>100 cm o más</span></div>
+      <input type="range" id="rUmb" min="2" max="100" value="15" style="margin-top:10px">
+      <div class="acciones" style="margin-top:8px"><button class="btn chico" id="bCal">🎯 Calibrar con el camino vacío</button></div>
+    </div>
+  </div>
+
+  <!-- EDITOR DE LA MATRIZ -->
+  <div class="card c-editor">
+    <h2>🎨 Dibujos de la matriz</h2>
+    <p class="sub">Toca las luces para prenderlas o apagarlas (o arrastra el dedo). Luego toca <b>Guardar en el Arduino</b>: se ve 2 segundos en la matriz y queda guardado aunque lo apagues.</p>
+    <div class="editor">
+      <div>
+        <div class="pestanas"><button class="btn chico act" id="tab1">Dibujo 1</button><button class="btn chico" id="tab2">Dibujo 2</button></div>
+        <div class="matriz" id="edMatriz"></div>
+      </div>
+      <div class="lado">
+        <div class="acciones">
+          <button class="btn chico" id="edLimpiar">Borrar todo</button>
+          <button class="btn chico" id="edLlenar">Prender todo</button>
+          <button class="btn chico" id="edInvertir">Invertir</button>
+        </div>
+        <div class="acciones" style="margin-top:8px">
+          <button class="btn chico" id="edCor">❤ Corazón</button>
+          <button class="btn chico" id="edCar">☺ Carita</button>
+          <button class="btn chico" id="edEst">★ Estrella</button>
+          <button class="btn chico" id="edCasa">⌂ Casa</button>
+          <button class="btn chico" id="edFle">↑ Flecha</button>
+        </div>
+        <div class="acciones" style="margin-top:14px"><button class="btn pri" id="edGuardar">💾 Guardar en el Arduino</button></div>
+        <p class="sub" style="margin-top:12px">La animación muestra: dibujo 1 → apagado → dibujo 2 → apagado.</p>
+        <div class="mini"><canvas id="mini1" width="64" height="64"></canvas><canvas id="mini2" width="64" height="64"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -236,7 +272,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
     <div class="diag">
       <div class="dato"><small>Sonido (D2)</small><b class="mono" id="dSon">—</b></div>
       <div class="dato"><small>Vibración (D3) cambios</small><b class="mono" id="dVib">—</b></div>
-      <div class="dato"><small>Fotoresistencia (A0)</small><b class="mono" id="dLdr">—</b></div>
+      <div class="dato"><small>Ultrasónico (D8/D12) cm</small><b class="mono" id="dLdr">—</b></div>
       <div class="dato"><small>Servo (D9)</small><b class="mono" id="dAng">—</b></div>
     </div>
     <div class="consola"><input id="cmd" placeholder="Orden, p. ej. ESTADO" autocomplete="off" autocapitalize="characters"><button class="btn chico" id="bCmd">Enviar</button></div>
@@ -258,7 +294,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
       <g class="pin">
         <text x="560" y="146" text-anchor="end">D2</text><text x="560" y="170" text-anchor="end">D3</text><text x="560" y="194" text-anchor="end">D4</text>
         <text x="560" y="218" text-anchor="end">D5</text><text x="560" y="242" text-anchor="end">D6</text><text x="560" y="266" text-anchor="end">D7</text>
-        <text x="342" y="146">D9</text><text x="342" y="170">D10</text><text x="342" y="194">D11</text><text x="342" y="266">A0</text>
+        <text x="342" y="146">D9</text><text x="342" y="170">D10</text><text x="342" y="194">D11</text><text x="342" y="218">D8</text><text x="342" y="242">D12</text>
         <text x="450" y="290" text-anchor="middle">5V · GND</text>
       </g>
       <!-- cables derecha -->
@@ -273,7 +309,8 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
         <path d="M330 142H250V82H210" stroke="#6cb8ff"/>
         <path d="M330 166H270V222H210" stroke="#ff5c8a"/>
         <path d="M330 190H260V246H210" stroke="#ff5c8a" stroke-dasharray="6 4"/>
-        <path d="M330 262H280V372H210" stroke="#ff8a3d"/>
+        <path d="M330 214H290V362H210" stroke="#ff8a3d"/>
+        <path d="M330 238H280V386H210" stroke="#ff8a3d" stroke-dasharray="6 4"/>
       </g>
       <!-- módulos derecha -->
       <rect class="mod" x="690" y="30" width="190" height="70"/><text class="t" x="704" y="54">Sensor de sonido</text><text class="p" x="704" y="74">DO → D2 · VCC 5V · GND</text><text class="p" x="704" y="90">tornillo: sensibilidad</text>
@@ -283,7 +320,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
       <!-- módulos izquierda -->
       <rect class="mod" x="20" y="40" width="190" height="80"/><text class="t" x="34" y="64">Servomotor SG90</text><text class="p" x="34" y="84">naranja → D9</text><text class="p" x="34" y="100">rojo 5V · café GND</text>
       <rect class="mod" x="20" y="180" width="190" height="100"/><text class="t" x="34" y="204">Bluetooth HC-05</text><text class="p" x="34" y="224">TXD → D10</text><text class="p" x="34" y="240">RXD ← D11 (con divisor)</text><text class="p" x="34" y="256">VCC 5V · GND</text>
-      <rect class="mod" x="20" y="320" width="190" height="110"/><text class="t" x="34" y="344">Fotoresistencia</text><text class="p" x="34" y="364">pata 1 → 5V</text><text class="p" x="34" y="380">pata 2 → A0</text><text class="p" x="34" y="396">resistencia 10 kΩ</text><text class="p" x="34" y="412">de A0 a GND</text>
+      <rect class="mod" x="20" y="320" width="190" height="110"/><text class="t" x="34" y="344">Ultrasónico HC-SR04</text><text class="p" x="34" y="364">TRIG → D8</text><text class="p" x="34" y="380">ECHO → D12</text><text class="p" x="34" y="396">VCC 5V · GND</text><text class="p" x="34" y="412">mirando hacia el auto</text>
     </svg>
   </div>
 
@@ -294,7 +331,7 @@ footer{margin-top:40px;color:var(--mut);font-size:13px;text-align:center}
     <div class="pieza"><h3><i style="background:#ffb547"></i>Matriz 8×8 (MAX7219)</h3><table><tr><td>VCC</td><td>5V</td></tr><tr><td>GND</td><td>GND</td></tr><tr><td>DIN</td><td>D7</td></tr><tr><td>CS</td><td>D6</td></tr><tr><td>CLK</td><td>D5</td></tr></table><p>Conecta el lado que dice DIN (entrada), no DOUT.</p></div>
     <div class="pieza"><h3><i style="background:#6cb8ff"></i>Servomotor</h3><table><tr><td>Señal (naranja)</td><td>D9</td></tr><tr><td>Rojo</td><td>5V</td></tr><tr><td>Café / negro</td><td>GND</td></tr></table><p>0° = cerrada, 90° = abierta.</p></div>
     <div class="pieza"><h3><i style="background:#ff5c8a"></i>Bluetooth HC-05</h3><table><tr><td>TXD</td><td>D10</td></tr><tr><td>RXD</td><td>D11 *</td></tr><tr><td>VCC</td><td>5V</td></tr><tr><td>GND</td><td>GND</td></tr></table><p>* D11 → resistencia 1 kΩ → RXD, y de RXD una de 2 kΩ a GND (el HC-05 recibe a 3,3 V). Clave para emparejar: 1234 o 0000.</p></div>
-    <div class="pieza"><h3><i style="background:#ff8a3d"></i>Fotoresistencia (LDR)</h3><table><tr><td>Pata 1</td><td>5V</td></tr><tr><td>Pata 2</td><td>A0</td></tr><tr><td>Resistencia 10 kΩ</td><td>A0 → GND</td></tr></table><p>Va en el piso, mirando hacia arriba, donde pasa el auto.</p></div>
+    <div class="pieza"><h3><i style="background:#ff8a3d"></i>Sensor ultrasónico HC-SR04</h3><table><tr><td>VCC</td><td>5V</td></tr><tr><td>TRIG</td><td>D8</td></tr><tr><td>ECHO</td><td>D12</td></tr><tr><td>GND</td><td>GND</td></tr></table><p>Ponlo junto a la compuerta, a la altura del auto y mirando hacia donde llega. Con el camino vacío toca “Calibrar”: abre cuando algo está a menos del 60 % de esa distancia.</p></div>
   </div>
 
   <div class="ojo"><b>Para que no falle</b>
@@ -314,8 +351,12 @@ const $ = id => document.getElementById(id);
 const SPP = '00001101-0000-1000-8000-00805f9b34fb';
 const CORAZON = [0x00,0x66,0xFF,0xFF,0x7E,0x3C,0x18,0x00];
 const CARITA  = [0x3C,0x42,0xA5,0x81,0xA5,0x99,0x42,0x3C];
+const ESTRELLA = [0x18,0x18,0xFF,0x7E,0x3C,0x7E,0xE7,0xC3];
+const CASA = [0x18,0x3C,0x7E,0xFF,0x81,0x99,0x99,0xFF];
+const FLECHA = [0x18,0x3C,0x7E,0xFF,0x18,0x18,0x18,0x18];
+let FIG = [CORAZON.slice(), CARITA.slice()];   // lo que tiene guardado el Arduino
 
-let S = { matriz:0, cuadro:0, buzzer:0, resta:0, puerta:0, auto:1, luz:0, umbral:300, sonido:1, vibra:1, sens:4, brillo:6, ang:0 };
+let S = { matriz:0, cuadro:0, buzzer:0, resta:0, puerta:0, auto:1, luz:300, umbral:15, sonido:1, vibra:1, sens:4, brillo:6, ang:0 };
 let modo = 'nada';          // nada | real | demo
 let puerto = null, lector = null, escritor = null, ultimo = 0, buffer = '';
 
@@ -336,7 +377,7 @@ function log(t, rojo) {
 let buzzerAntes = 0;
 function pintar() {
   const on = !!S.matriz;
-  dibujar(on ? (S.cuadro == 0 ? CORAZON : S.cuadro == 2 ? CARITA : null) : null);
+  dibujar(on ? (S.cuadro == 0 ? FIG[0] : S.cuadro == 2 ? FIG[1] : null) : null);
   [...$('leyenda').children].forEach((s, i) => s.classList.toggle('act', on && i == S.cuadro));
   $('etqMatriz').textContent = on ? 'Encendida' : 'Apagada'; $('etqMatriz').className = 'etq' + (on ? ' on' : '');
   $('bMatriz').textContent = on ? 'Apagar' : 'Encender';
@@ -364,10 +405,10 @@ function pintar() {
   $('etqPuerta').textContent = ab ? 'Abierta' : 'Cerrada'; $('etqPuerta').className = 'etq' + (ab ? ' on' : '');
   $('bPuerta').textContent = ab ? 'Cerrar' : 'Abrir';
   $('swAuto').checked = !!S.auto;
-  $('vLuz').textContent = S.luz; $('vUmb').textContent = S.umbral;
-  $('aLuz').style.left = (S.luz / 1023 * 100) + '%'; $('mUmb').style.left = (S.umbral / 1023 * 100) + '%';
+  $('vLuz').textContent = S.luz >= 300 ? 'sin eco' : S.luz; $('vUmb').textContent = S.umbral;
+  $('aLuz').style.left = Math.min(100, S.luz) + '%'; $('mUmb').style.left = Math.min(100, S.umbral) + '%';
   if (document.activeElement !== $('rUmb')) $('rUmb').value = S.umbral;
-  $('ldrBrillo').setAttribute('opacity', S.luz < S.umbral ? 0 : 1);
+  $('ondas').setAttribute('stroke', S.luz < S.umbral ? '#ff4d4d' : '#6cb8ff');
   $('dAng').textContent = S.ang + '°';
 }
 
@@ -387,6 +428,11 @@ function linea(l) {
     $('dSon').textContent = (p[1] === '1' ? 'ALTO' : 'bajo') + ' · ' + p[2];
     $('dVib').textContent = p[4];
     $('dLdr').textContent = p[5];
+  } else if (p[0] === 'FG' && p.length >= 3 && /^[0-9A-F]{16}$/i.test(p[2])) {
+    const k = p[1] === '2' ? 1 : 0;
+    FIG[k] = [...Array(8)].map((_, i) => parseInt(p[2].substr(i * 2, 2), 16));
+    if (!editado[k]) { ED[k] = FIG[k].slice(); pintarEditor(); }
+    pintarMinis(); pintar();
   } else if (p[0] === 'ERR') log('Orden no entendida: ' + p.slice(1).join(','), true);
 }
 function recibir(txt) {
@@ -475,7 +521,7 @@ $('rSens').oninput = e => $('vSens').textContent = e.target.value;
 $('rSens').onchange = e => enviar('SENSVIB:' + e.target.value);
 $('bPuerta').onclick = () => enviar('PUERTA:' + (S.puerta ? 0 : 1));
 $('swAuto').onchange = e => enviar('AUTO:' + (e.target.checked ? 1 : 0));
-$('rUmb').oninput = e => { $('vUmb').textContent = e.target.value; $('mUmb').style.left = (e.target.value / 1023 * 100) + '%'; };
+$('rUmb').oninput = e => { $('vUmb').textContent = e.target.value; $('mUmb').style.left = Math.min(100, e.target.value) + '%'; };
 $('rUmb').onchange = e => enviar('UMBRAL:' + e.target.value);
 $('bCal').onclick = () => enviar('CAL');
 $('swDiag').onchange = e => enviar('DIAG:' + (e.target.checked ? 1 : 0));
@@ -487,6 +533,7 @@ function mostrarDemo(v) { ['bAplauso','bGolpe','bAuto'].forEach(id => $(id).hidd
 const demo = (() => {
   let t = [], d, tCuadro = 0, tBuz = 0, tClaro = 0, tOsc = 0, oscAntes = false, autoEncima = false, tAutoFin = 0;
   const ev = s => linea('EV,' + s);
+  function figs() { linea('FG,1,' + d.f1); linea('FG,2,' + d.f2); }
   function st() { linea(['ST',d.matriz,d.cuadro,d.buzzer,d.resta,d.puerta,d.auto,d.luz,d.umbral,d.sonido,d.vibra,d.sens,d.brillo,d.ang].join(',')); }
   function matriz(on, o) { d.matriz = on ? 1 : 0; d.cuadro = 0; tCuadro = Date.now(); ev((on ? 'Matriz encendida (' : 'Matriz apagada (') + o + ')'); }
   function buz(on, o) { d.buzzer = on ? 1 : 0; d.resta = on ? 10 : 0; tBuz = Date.now(); ev((on ? 'Buzzer 10 s (' : 'Buzzer apagado (') + o + ')'); }
@@ -496,11 +543,11 @@ const demo = (() => {
     if (d.matriz && ahora - tCuadro >= 700) { tCuadro = ahora; d.cuadro = (d.cuadro + 1) % 4; }
     if (d.buzzer) { d.resta = Math.max(0, Math.ceil((10000 - (ahora - tBuz)) / 1000)); if (ahora - tBuz >= 10000) buz(false, 'fin 10 s'); }
     if (autoEncima && ahora > tAutoFin) autoEncima = false;
-    const meta = autoEncima ? 60 + Math.random() * 20 : 210 + Math.random() * 15;
-    d.luz = Math.round((d.luz * 3 + meta) / 4);
+    const meta = autoEncima ? 5 + Math.random() * 2 : 40 + Math.random() * 2;   // cm: vacío ≈ 40, auto ≈ 6
+    d.luz = Math.round((d.luz + meta) / 2);
     const osc = d.luz < d.umbral;
     if (osc !== oscAntes) { oscAntes = osc; if (osc) tOsc = ahora; else tClaro = ahora; }
-    if (d.auto) { if (osc && !d.puerta && ahora - tOsc >= 400) puerta(true, 'auto detectado'); if (!osc && d.puerta && ahora - tClaro >= 3000) puerta(false, 'auto ya paso'); }
+    if (d.auto) { if (osc && !d.puerta && ahora - tOsc >= 300) puerta(true, 'auto detectado'); if (!osc && d.puerta && ahora - tClaro >= 3000) puerta(false, 'auto ya paso'); }
     const metaAng = d.puerta ? 90 : 0;
     if (d.ang !== metaAng) d.ang += Math.sign(metaAng - d.ang) * Math.min(6, Math.abs(metaAng - d.ang));
   }
@@ -512,22 +559,25 @@ const demo = (() => {
     else if (c === 'AUTO') { d.auto = v === 1 ? 1 : 0; ev(d.auto ? 'Compuerta en automatico' : 'Compuerta en manual'); }
     else if (c === 'SONIDO') { d.sonido = v === 1 ? 1 : 0; ev(d.sonido ? 'Aplausos activados' : 'Aplausos desactivados'); }
     else if (c === 'VIBRA') { d.vibra = v === 1 ? 1 : 0; ev(d.vibra ? 'Sensor de vibracion activado' : 'Sensor de vibracion desactivado'); }
-    else if (c === 'UMBRAL' && v >= 0) { d.umbral = Math.min(1023, v); ev('Umbral de luz = ' + d.umbral); }
+    else if (c === 'UMBRAL' && v >= 0) { d.umbral = Math.max(2, Math.min(200, v)); ev('Distancia para abrir = ' + d.umbral + ' cm'); }
     else if (c === 'SENSVIB' && v >= 0) { d.sens = Math.max(1, Math.min(20, v)); ev('Sensibilidad vibracion = ' + d.sens); }
     else if (c === 'BRILLO' && v >= 0) d.brillo = Math.min(15, v);
-    else if (c === 'CAL') { d.umbral = Math.round(d.luz * .55); ev('Calibrado: umbral = ' + d.umbral); }
+    else if (c === 'CAL') { d.umbral = Math.max(3, Math.min(100, Math.round(d.luz * .6))); ev('Calibrado: sin auto ' + d.luz + ' cm, abre a menos de ' + d.umbral + ' cm'); }
+    else if ((c === 'FIG1' || c === 'FIG2') && /^[0-9A-F]{16}$/.test(v0 || '')) { const k = c === 'FIG1' ? 1 : 2; d['f' + k] = v0; ev('Figura ' + k + ' guardada'); figs(); }
+    else if (c === 'FIGS') { figs(); return; }
     else if (c === 'PRUEBA') ev('Prueba de la matriz: 64 luces prendidas 3 s');
-    else if (c === 'DIAG' || c === 'ESTADO') {}
+    else if (c === 'ESTADO') figs();
+    else if (c === 'DIAG') {}
     else { linea('ERR,' + o); return; }
     st();
   }
   return {
     orden,
     iniciar() {
-      d = { matriz:0, cuadro:0, buzzer:0, resta:0, puerta:0, auto:1, luz:215, umbral:119, sonido:1, vibra:1, sens:4, brillo:6, ang:0 };
+      d = { matriz:0, cuadro:0, buzzer:0, resta:0, puerta:0, auto:1, luz:40, umbral:15, sonido:1, vibra:1, sens:4, brillo:6, ang:0, f1:'0066FFFF7E3C1800', f2:'3C42A581A599423C' };
       modo = 'demo'; ponerEstado('demo', 'Modo demostración'); $('bDesc').disabled = false; mostrarDemo(true);
       log('Modo demostración: usa los botones 👏 ✊ 🚗 para imitar los sensores');
-      ev('Casa semiautomatica lista');
+      ev('Casa semiautomatica lista'); figs();
       t.push(setInterval(tic, 50), setInterval(() => { st(); if ($('swDiag').checked) linea('DG,0,0,0,0,' + d.luz); }, 250));
       st();
     },
@@ -543,6 +593,36 @@ const demo = (() => {
     }
   };
 })();
+/* ---------- editor de dibujos ---------- */
+let ED = [FIG[0].slice(), FIG[1].slice()], editado = [false, false], edK = 0, pintando = null;
+const edLeds = [];
+for (let i = 0; i < 64; i++) { const d = document.createElement('div'); d.className = 'led'; $('edMatriz').appendChild(d); edLeds.push(d); }
+function bit(f, r, c) { return (f[r] >> (7 - c)) & 1; }
+function pintarEditor() { for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) edLeds[r*8+c].classList.toggle('on', !!bit(ED[edK], r, c)); }
+function pintarMinis() {
+  [0, 1].forEach(k => { const g = $('mini' + (k + 1)).getContext('2d'); g.clearRect(0, 0, 64, 64);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { g.fillStyle = bit(FIG[k], r, c) ? '#ff5c8a' : '#2a1414'; g.beginPath(); g.arc(c*8+4, r*8+4, 3, 0, 7); g.fill(); } });
+}
+function ponerLed(i, val) { const r = i >> 3, c = i & 7, m = 1 << (7 - c); ED[edK][r] = val ? ED[edK][r] | m : ED[edK][r] & ~m; editado[edK] = true; pintarEditor(); }
+function ledDe(e) { const el = document.elementFromPoint(e.clientX, e.clientY); return edLeds.indexOf(el); }
+$('edMatriz').addEventListener('pointerdown', e => { const i = ledDe(e); if (i < 0) return; pintando = !bit(ED[edK], i >> 3, i & 7); ponerLed(i, pintando); e.preventDefault(); });
+$('edMatriz').addEventListener('pointermove', e => { if (pintando === null) return; const i = ledDe(e); if (i >= 0 && bit(ED[edK], i >> 3, i & 7) != pintando) ponerLed(i, pintando); });
+addEventListener('pointerup', () => pintando = null);
+function elegir(k) { edK = k; $('tab1').classList.toggle('act', k == 0); $('tab2').classList.toggle('act', k == 1); pintarEditor(); }
+$('tab1').onclick = () => elegir(0); $('tab2').onclick = () => elegir(1);
+function ponerTodo(f) { ED[edK] = f.slice(); editado[edK] = true; pintarEditor(); }
+$('edLimpiar').onclick = () => ponerTodo([0,0,0,0,0,0,0,0]);
+$('edLlenar').onclick = () => ponerTodo([255,255,255,255,255,255,255,255]);
+$('edInvertir').onclick = () => ponerTodo(ED[edK].map(v => 255 - v));
+$('edCor').onclick = () => ponerTodo(CORAZON); $('edCar').onclick = () => ponerTodo(CARITA);
+$('edEst').onclick = () => ponerTodo(ESTRELLA); $('edCasa').onclick = () => ponerTodo(CASA); $('edFle').onclick = () => ponerTodo(FLECHA);
+$('edGuardar').onclick = () => {
+  if (modo === 'nada') return log('Conecta el Arduino (o el modo demostración) para guardar el dibujo', true);
+  const hex = ED[edK].map(v => v.toString(16).toUpperCase().padStart(2, '0')).join('');
+  editado[edK] = false; enviar('FIG' + (edK + 1) + ':' + hex);
+};
+pintarEditor(); pintarMinis();
+
 $('bAplauso').onclick = () => demo.aplauso();
 $('bGolpe').onclick = () => demo.golpe();
 $('bAuto').onclick = () => demo.pasarAuto();
